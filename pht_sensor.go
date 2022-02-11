@@ -67,7 +67,6 @@ func publisher(opts *mqtt.ClientOptions) {
 func main() {
 	broker := flag.String("broker", "tcp://ia_mqtt_broker:1883", "The broker URI. ex: tcp://10.10.1.1:1883")
 	id := flag.String("id", "virtual_device_001", "The ClientID (optional)")
-    tag := flag.String("tag", "simulated_pht", "The tag for MQTT broker")
 	flag.Parse()
 
 	opts := mqtt.NewClientOptions().AddBroker(*broker).SetClientID(*id)
@@ -75,4 +74,3 @@ func main() {
 	go publisher(opts)
 	select {}
 }
-
