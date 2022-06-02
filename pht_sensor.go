@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"flag"
+	"io/ioutil"
 	"log"
 	"math/rand"
 	"sync"
@@ -26,23 +27,31 @@ type Pressure struct {
 	ID    string  `json:"device_id"`
 }
 
-type PublishOptions struct {
-	Interval  time.Duration //int64
-	Count     int64
-	TempBase  float64
-	HumiBase  float64
-	PresBase  float64
-	TempDev   float64
-	HumiDev   float64
-	PresDev   float64
-	DeviceId  string
-	TempTopic string
-	HumiTopic string
-	PresTopic string
+type ValueConfig struct {
+	Mean      float64 `json:"mean"`
+	Deviation float64 `json:"deviation"`
 }
 
-func publisher(opts *mqtt.ClientOptions, options *PublishOptions) {
+func (v ValueConfig) Value() float64 {
+	return v.Mean + rand.NormFloat64()*v.Deviation
+}
+
+type Options struct {
+	Interval    time.Duration `json:"interval"`
+	Count       int64         `json:"count"`
+	Temperature ValueConfig   `json:"temperature"`
+	Humidity    ValueConfig   `json:"humidity"`
+	Pressure    ValueConfig   `json:"pressure"`
+	Broker      string        `json:"broker"`
+	DeviceId    string        `json:"device_id"`
+	TempTopic   string        `json:"temperature_topic"`
+	HumiTopic   string        `json:"humidity_topic"`
+	PresTopic   string        `json:"pressure_topic"`
+}
+
+func publisher(options *Options) {
 	rand.Seed(time.Now().UnixNano())
+	opts := mqtt.NewClientOptions().AddBroker(options.Broker).SetClientID(options.DeviceId)
 	client := mqtt.NewClient(opts)
 	if token := client.Connect(); token.Wait() && token.Error() != nil {
 		panic(token.Error())
@@ -59,7 +68,7 @@ func publisher(opts *mqtt.ClientOptions, options *PublishOptions) {
 			i = i + 1
 		}
 		log.Println("Publishing......")
-		x := options.TempBase + rand.NormFloat64()*options.TempDev
+		x := options.Temperature.Value()
 		t := &Temperature{x, options.DeviceId}
 		buf, err := json.Marshal(t)
 		if err == nil {
@@ -67,7 +76,7 @@ func publisher(opts *mqtt.ClientOptions, options *PublishOptions) {
 			token.Wait()
 		}
 
-		y := options.HumiBase + rand.NormFloat64()*options.HumiDev
+		y := options.Humidity.Value()
 		h := &Humidity{y, options.DeviceId}
 		buf, err = json.Marshal(h)
 		if err == nil {
@@ -75,7 +84,7 @@ func publisher(opts *mqtt.ClientOptions, options *PublishOptions) {
 			token.Wait()
 		}
 
-		z := options.PresBase + rand.NormFloat64()*options.PresDev
+		z := options.Pressure.Value()
 		p := &Pressure{z, options.DeviceId}
 		buf, err = json.Marshal(p)
 		if err == nil {
@@ -89,46 +98,40 @@ func publisher(opts *mqtt.ClientOptions, options *PublishOptions) {
 	log.Println("Done and Disconnected")
 }
 
+func parseOptions() (Options, error) {
+	var opts Options
+
+	opt_buf, err := ioutil.ReadFile("config/config.json")
+	if err != nil {
+		//log.Fatalln("fail to read config file")
+		return opts, err
+	}
+
+	if err := json.Unmarshal(opt_buf, &opts); err != nil {
+		//log.Fatalln("fail to parse config file")
+		return opts, err
+	}
+	return opts, nil
+}
+
 func main() {
 	log.SetPrefix("[PHT]")
 	broker := flag.String("broker", "tcp://localhost:1883", "The broker URI. ex: tcp://10.10.1.1:1883")
-	id := flag.String("id", "virtual_device_001", "The ClientID (optional)")
-	i := flag.Int64("i", 1000, "Publish data every # milliseconds")
-	c := flag.Int64("count", 10, "Exit after publish #count times, 0 for infinite")
-	tt := flag.String("tt", "temperature/simulated/0", "Tempature topic")
-	ht := flag.String("ht", "humidity/simulated/0", "Humidity topic")
-	pt := flag.String("pt", "pressure/simulated/0", "Pressure topic")
-	tb := flag.Float64("tb", 26.0, "Temperature base value")
-	td := flag.Float64("td", 2.0, "Temperature deviation value")
-	hb := flag.Float64("hb", 40.0, "Humidity base value")
-	hd := flag.Float64("hd", 2.0, "Humidity deviation value")
-	pb := flag.Float64("pb", 1.0, "Pressure base value")
-	pd := flag.Float64("pd", .1, "Pressure deviation value")
 	flag.Parse()
-
-	opts := mqtt.NewClientOptions().AddBroker(*broker).SetClientID(*id)
 
 	var wg sync.WaitGroup
 
-	options := PublishOptions{
-		Interval:  time.Duration(*i),
-		Count:     *c,
-		TempBase:  *tb,
-		HumiBase:  *hb,
-		PresBase:  *pb,
-		TempDev:   *td,
-		HumiDev:   *hd,
-		PresDev:   *pd,
-		DeviceId:  *id,
-		TempTopic: *tt,
-		HumiTopic: *ht,
-		PresTopic: *pt,
+	options, err := parseOptions()
+	if err != nil {
+		log.Fatalln("Failed to get options: %s", err.Error())
+		return
 	}
+	options.Broker = *broker
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		publisher(opts, &options)
+		publisher(&options)
 	}()
 	wg.Wait()
 }
