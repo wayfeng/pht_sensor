@@ -1,0 +1,16 @@
+interval: 1000
+count: 0
+temperature:
+  mean: 26
+  deviation: 2
+humidity:
+  mean: 40
+  deviation: 2
+pressure:
+  mean: 1
+  deviation: 0.1
+broker: tcp://mosquitto:1883
+device_id: virtual_device_001
+temperature_topic: temperature/simulated/0
+humidity_topic: humidity/simulated/0
+pressure_topic: pressure/simulated/0

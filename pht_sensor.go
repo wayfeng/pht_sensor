@@ -9,6 +9,8 @@ import (
 	"sync"
 	"time"
 
+	"gopkg.in/yaml.v3"
+
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 )
 
@@ -37,16 +39,16 @@ func (v ValueConfig) Value() float64 {
 }
 
 type Options struct {
-	Interval    time.Duration `json:"interval"`
-	Count       int64         `json:"count"`
-	Temperature ValueConfig   `json:"temperature"`
-	Humidity    ValueConfig   `json:"humidity"`
-	Pressure    ValueConfig   `json:"pressure"`
-	Broker      string        `json:"broker"`
-	DeviceId    string        `json:"device_id"`
-	TempTopic   string        `json:"temperature_topic"`
-	HumiTopic   string        `json:"humidity_topic"`
-	PresTopic   string        `json:"pressure_topic"`
+	Interval    int64       `json:"interval" yaml:"interval"`
+	Count       int64       `json:"count" yaml:"count"`
+	Temperature ValueConfig `json:"temperature" yaml:"temperature"`
+	Humidity    ValueConfig `json:"humidity" yaml:"humidity"`
+	Pressure    ValueConfig `json:"pressure" yaml:"pressure"`
+	Broker      string      `json:"broker" yaml:"broker"`
+	DeviceId    string      `json:"device_id" yaml:"device_id"`
+	TempTopic   string      `json:"temperature_topic" yaml:"temperature_topic"`
+	HumiTopic   string      `json:"humidity_topic" yaml:"humidity_topic"`
+	PresTopic   string      `json:"pressure_topic" yaml:"pressure_topic"`
 }
 
 func publisher(options *Options) {
@@ -91,23 +93,23 @@ func publisher(options *Options) {
 			token := client.Publish(options.PresTopic, byte(0), false, buf)
 			token.Wait()
 		}
-		time.Sleep((time.Millisecond * options.Interval))
+		time.Sleep(time.Millisecond * time.Duration(options.Interval))
 	}
 
 	client.Disconnect(250)
 	log.Println("Done and Disconnected")
 }
 
-func parseOptions() (Options, error) {
+func parseOptions(filename string) (Options, error) {
 	var opts Options
 
-	opt_buf, err := ioutil.ReadFile("config/config.json")
+	opt_buf, err := ioutil.ReadFile(filename)
 	if err != nil {
 		//log.Fatalln("fail to read config file")
 		return opts, err
 	}
 
-	if err := json.Unmarshal(opt_buf, &opts); err != nil {
+	if err := yaml.Unmarshal(opt_buf, &opts); err != nil {
 		//log.Fatalln("fail to parse config file")
 		return opts, err
 	}
@@ -116,17 +118,20 @@ func parseOptions() (Options, error) {
 
 func main() {
 	log.SetPrefix("[PHT]")
-	broker := flag.String("broker", "tcp://localhost:1883", "The broker URI. ex: tcp://10.10.1.1:1883")
+	broker := flag.String("broker", "", "The broker URI. ex: tcp://10.10.1.1:1883")
+	conf_file := flag.String("f", "config/config.yaml", "Configure file")
 	flag.Parse()
 
 	var wg sync.WaitGroup
 
-	options, err := parseOptions()
+	options, err := parseOptions(*conf_file)
 	if err != nil {
 		log.Fatalln("Failed to get options: %s", err.Error())
 		return
 	}
-	options.Broker = *broker
+	if *broker != "" {
+		options.Broker = *broker
+	}
 
 	wg.Add(1)
 	go func() {
