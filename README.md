@@ -24,5 +24,5 @@ mosquitto_sub -t '#' -h localhost -p 1883
 
 ## Run PHT Sensor container
 ```bash
-docker run --network mqtt pht_sensor:0.7 -broker tcp://mosquitto:1883
+docker run --network mqtt --volume ./config:/app/config:ro pht_sensor:0.9 -broker tcp://mosquitto:1883
 ```
